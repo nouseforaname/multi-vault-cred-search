@@ -1,0 +1,7 @@
+src:
+  addr: https://vault.some.domain
+  token: 
+
+target:
+  addr: https://vault.some-other.domain
+  token: 

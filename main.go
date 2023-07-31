@@ -111,7 +111,7 @@ func main() {
 		}
 	}
 
-	fmt.Println("You can start searching. Hit CTRL-C to stop")
+	fmt.Println("You can start searching. Hit ESC to stop")
 	findInMapValues(secretsSrc, secretsTarget)
 }
 func reset() {
@@ -126,7 +126,7 @@ func findInMapValues(src, target map[string]string) {
 
 	defer term.Close()
 	searchString := ""
-	fmt.Println("Hit enter to search for: " + searchString)
+	fmt.Printf("Hit enter to search for: `%v`", searchString)
 keyPressListenerLoop:
 	for {
 		switch ev := term.PollEvent(); ev.Type {
@@ -134,24 +134,28 @@ keyPressListenerLoop:
 			switch ev.Key {
 			case term.KeyEnter:
 				reset()
-				fmt.Println("searching for " + searchString)
-				srcHits := make([]string, 0)
-				targetHits := make([]string, 0)
-				for k, v := range src {
-					if strings.Contains(v, searchString) {
-						srcHits = append(srcHits, k)
+				if searchString != "" {
+					fmt.Println("searching for " + searchString)
+					srcHits := make([]string, 0)
+					targetHits := make([]string, 0)
+					for k, v := range src {
+						if strings.Contains(v, searchString) {
+							srcHits = append(srcHits, k)
+						}
 					}
-				}
-				for k, v := range target {
-					if strings.Contains(v, searchString) {
-						targetHits = append(targetHits, k)
+					for k, v := range target {
+						if strings.Contains(v, searchString) {
+							targetHits = append(targetHits, k)
+						}
 					}
+					fmt.Printf("%s was found in srcSecrets: \n", searchString)
+					fmt.Println(strings.Join(srcHits, "\n  -"))
+					fmt.Printf("%s was found in targetSecrets: \n", searchString)
+					fmt.Println(strings.Join(targetHits, "\n  -"))
+					searchString = ""
+				} else {
+					fmt.Printf("Hit enter to search for: `%v`", searchString)
 				}
-				fmt.Printf("%s was found in srcSecrets: \n", searchString)
-				fmt.Println(strings.Join(srcHits, "\n  -"))
-				fmt.Printf("%s was found in targetSecrets: \n", searchString)
-				fmt.Println(strings.Join(targetHits, "\n  -"))
-				searchString = ""
 			case term.KeyEsc:
 				break keyPressListenerLoop
 			case term.KeyBackspace2:
@@ -159,19 +163,19 @@ keyPressListenerLoop:
 				if len(searchString) > 0 {
 					searchString = searchString[:len(searchString)-1]
 				}
-				fmt.Println("Back enter to search for: " + searchString)
+				fmt.Printf("Hit enter to search for: `%v`", searchString)
 
 			case term.KeyBackspace:
 				reset()
 				if len(searchString) > 0 {
 					searchString = searchString[:len(searchString)-1]
 				}
-				fmt.Println("Back enter to search for: " + searchString)
+				fmt.Printf("Hit enter to search for: `%v`", searchString)
 			default:
 				// we only want to read a single character or one key pressed event
 				reset()
 				searchString += string(ev.Ch)
-				fmt.Println("Hit enter to search for: " + searchString)
+				fmt.Printf("Hit enter to search for: `%v`", searchString)
 			}
 		case term.EventError:
 			panic(ev.Err)

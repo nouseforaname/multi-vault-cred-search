@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -22,7 +24,26 @@ type conf struct {
 }
 
 func main() {
+	secretListFile := *flag.String("f", "find-me.txt", "path to file with line delimited list of secrets to search for")
+	flag.Parse()
+	var secretsToFind []string
 
+	fmt.Println(secretListFile)
+	if len(secretListFile) != 0 {
+		secretsList, err := os.Open(secretListFile)
+		if err != nil {
+
+			log.Fatalf("%v", secretListFile)
+			log.Fatalf("%v", err)
+		}
+		defer secretsList.Close()
+		fileScanner := bufio.NewScanner(secretsList)
+		fileScanner.Split(bufio.ScanLines)
+
+		for fileScanner.Scan() {
+			secretsToFind = append(secretsToFind, fileScanner.Text())
+		}
+	}
 	yamlFile, err := os.ReadFile("./config.yml")
 	if err != nil {
 		log.Fatalf("%v", err)
@@ -110,14 +131,38 @@ func main() {
 			log.Fatalf("unable to write target vault export: %v", err)
 		}
 	}
+	if len(secretsToFind) == 0 {
+		fmt.Println("You can start searching. Hit ESC to stop")
+		findInMapValues(secretsSrc, secretsTarget)
+	} else {
+		for _, secret := range secretsToFind {
+			search(secret, secretsSrc, secretsTarget)
 
-	fmt.Println("You can start searching. Hit ESC to stop")
-	findInMapValues(secretsSrc, secretsTarget)
+		}
+	}
 }
 func reset() {
 	term.Sync() // cosmestic purpose
 }
-
+func search(searchString string, src, target map[string]string) {
+	fmt.Println("searching for " + searchString)
+	srcHits := make([]string, 0)
+	targetHits := make([]string, 0)
+	for k, v := range src {
+		if strings.Contains(v, searchString) {
+			srcHits = append(srcHits, k)
+		}
+	}
+	for k, v := range target {
+		if strings.Contains(v, searchString) {
+			targetHits = append(targetHits, k)
+		}
+	}
+	fmt.Printf("%s was found in srcSecrets: \n", searchString)
+	fmt.Println(strings.Join(srcHits, "\n  -"))
+	fmt.Printf("%s was found in targetSecrets: \n", searchString)
+	fmt.Println(strings.Join(targetHits, "\n  -"))
+}
 func findInMapValues(src, target map[string]string) {
 	err := term.Init()
 	if err != nil {
@@ -135,23 +180,7 @@ keyPressListenerLoop:
 			case term.KeyEnter:
 				reset()
 				if searchString != "" {
-					fmt.Println("searching for " + searchString)
-					srcHits := make([]string, 0)
-					targetHits := make([]string, 0)
-					for k, v := range src {
-						if strings.Contains(v, searchString) {
-							srcHits = append(srcHits, k)
-						}
-					}
-					for k, v := range target {
-						if strings.Contains(v, searchString) {
-							targetHits = append(targetHits, k)
-						}
-					}
-					fmt.Printf("%s was found in srcSecrets: \n", searchString)
-					fmt.Println(strings.Join(srcHits, "\n  -"))
-					fmt.Printf("%s was found in targetSecrets: \n", searchString)
-					fmt.Println(strings.Join(targetHits, "\n  -"))
+					search(searchString, src, target)
 					searchString = ""
 				} else {
 					fmt.Printf("Hit enter to search for: `%v`", searchString)

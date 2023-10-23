@@ -1,145 +1,51 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
-	vault "github.com/hashicorp/vault/api"
+	"github.com/nouseforaname/vault-cred-matcher/cmd"
 	term "github.com/nsf/termbox-go"
-	"gopkg.in/yaml.v2"
 )
 
-type target struct {
-	Addr  string `yaml:"addr"`
-	Token string `yaml:"token"`
-}
-type conf struct {
-	Src    target `yaml:"src"`
-	Target target `yaml:"target"`
-}
+const Search = "search"
+const Migrate = "migrate"
 
 func main() {
-	secretListFile := *flag.String("f", "find-me.txt", "path to file with line delimited list of secrets to search for")
-	flag.Parse()
-	var secretsToFind []string
 
-	fmt.Println(secretListFile)
-	if len(secretListFile) != 0 {
-		secretsList, err := os.Open(secretListFile)
-		if err != nil {
-
-			log.Fatalf("%v", secretListFile)
-			log.Fatalf("%v", err)
-		}
-		defer secretsList.Close()
-		fileScanner := bufio.NewScanner(secretsList)
-		fileScanner.Split(bufio.ScanLines)
-
-		for fileScanner.Scan() {
-			secretsToFind = append(secretsToFind, fileScanner.Text())
-		}
-	}
-	yamlFile, err := os.ReadFile("./config.yml")
+	cmd, err := cmd.NewCmd()
 	if err != nil {
-		log.Fatalf("%v", err)
+		log.Fatalf("Error creating command: %s", err)
 	}
-
-	conf := &conf{}
-
-	err = yaml.Unmarshal(yamlFile, &conf)
+	action, err := cmd.GetAction(Migrate)
 	if err != nil {
-		log.Fatalf("%v", err)
+		log.Fatalf("Error creating command: %s", err)
 	}
-	secretsSrc := make(map[string]string)
-	secretsTarget := make(map[string]string)
+	action.Execute()
 
-	if _, err := os.Stat("./source-data.json"); err == nil {
-		fmt.Println("Source dump exists, loading export")
-		bytes, err := os.ReadFile("./source-data.json")
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		json.Unmarshal(bytes, &secretsSrc)
-	} else {
-		srcConfig := vault.DefaultConfig()
-		err = srcConfig.ConfigureTLS(
-			&vault.TLSConfig{
-				Insecure:      true,
-				TLSServerName: conf.Src.Addr,
-			},
-		)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		srcConfig.Address = conf.Src.Addr
+	//var secretsToFind []string
 
-		srcClient, err := vault.NewClient(srcConfig)
-		if err != nil {
-			log.Fatalf("unable to initialize Vault client: %v", err)
-		}
-		srcClient.SetToken(conf.Src.Token)
+	//fmt.Println(secretListFile)
+	//if len(secretListFile) != 0 {
+	//	secretsList, err := os.Open(secretListFile)
+	//	if err != nil {
 
-		secretsSrc["source_vault"] = srcConfig.Address
+	//		log.Fatalf("%v", secretListFile)
+	//		log.Fatalf("%v", err)
+	//	}
+	//	defer secretsList.Close()
+	//	fileScanner := bufio.NewScanner(secretsList)
+	//	fileScanner.Split(bufio.ScanLines)
 
-		secretsSrc = recurse("concourse", "", srcClient, secretsSrc)
-		jsonString, err := json.Marshal(secretsSrc)
-		os.WriteFile("./source-data.json", []byte(jsonString), 0644)
+	//	for fileScanner.Scan() {
+	//		secretsToFind = append(secretsToFind, fileScanner.Text())
+	//	}
+	//}
 
-		if err != nil {
-			log.Fatalf("unable to write src vault export: %v", err)
-		}
-	}
+	//secretsSrc := make(map[string]string)
+	//secretsTarget := make(map[string]string)
 
-	if _, err := os.Stat("./target-data.json"); err == nil {
-		fmt.Println("Target dump exists, loading export")
-		bytesTarget, err := os.ReadFile("./target-data.json")
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		json.Unmarshal(bytesTarget, &secretsTarget)
-	} else {
-		targetConfig := vault.DefaultConfig()
-		err = targetConfig.ConfigureTLS(
-			&vault.TLSConfig{
-				Insecure:      true,
-				TLSServerName: conf.Target.Addr,
-			},
-		)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-		targetConfig.Address = conf.Target.Addr
-
-		targetClient, err := vault.NewClient(targetConfig)
-		if err != nil {
-			log.Fatalf("unable to initialize Vault client: %v", err)
-		}
-		targetClient.SetToken(conf.Target.Token)
-
-		secretsTarget["source_vault"] = targetConfig.Address
-
-		secretsTarget = recurse("runway_concourse", "cryogenics/", targetClient, secretsTarget)
-		jsonString, err := json.Marshal(secretsTarget)
-		os.WriteFile("./target-data.json", []byte(jsonString), 0644)
-
-		if err != nil {
-			log.Fatalf("unable to write target vault export: %v", err)
-		}
-	}
-	if len(secretsToFind) == 0 {
-		fmt.Println("You can start searching. Hit ESC to stop")
-		findInMapValues(secretsSrc, secretsTarget)
-	} else {
-		for _, secret := range secretsToFind {
-			search(secret, secretsSrc, secretsTarget)
-
-		}
-	}
 }
 func reset() {
 	term.Sync() // cosmestic purpose
@@ -212,36 +118,70 @@ keyPressListenerLoop:
 	}
 }
 
-func recurse(basepath, key string, client *vault.Client, secretsMap map[string]string) map[string]string {
-	path := basepath
-	if key != "" {
-		path = fmt.Sprintf("%s/%s", basepath, key)
-	}
-	secrets, err := client.Logical().List(path)
+//a.SourceSecrets = recurse("runway_concourse/", "cryogenics", a.srcVaultClient, a.SourceSecrets)
+//get_all_secrets()
+//if _, err := os.Stat("./source-data.json"); err != nil {
 
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	keys := secrets.Data["keys"].([]interface{})
-	for _, v := range keys {
-		k := v.(string)
-		if k[len(k)-1:] == "/" {
-			secretsMap = recurse(basepath, fmt.Sprintf("%s%s", key, k), client, secretsMap)
-		} else {
-			secretPath := fmt.Sprintf("%s/%s%s", basepath, key, k)
-			secret, err := client.Logical().Read(secretPath)
-			if err != nil {
-				log.Fatalf("%v", err)
-			}
-			jsonString, err := json.Marshal(secret)
-			if err != nil {
-				log.Fatalf("%v", err)
-			}
-			secretsMap[secretPath] = string(jsonString)
-			fmt.Printf("found secret in %s: %s\n", secretsMap["source_vault"], secretPath)
+//	secretsSrc["source_vault"] = srcConfig.Address
 
-		}
-	}
+//	secretsSrc = recurse("concourse", "", srcClient, secretsSrc)
+//	jsonString, err := json.Marshal(secretsSrc)
+//	os.WriteFile("./source-data.json", []byte(jsonString), 0644)
 
-	return secretsMap
-}
+//	if err != nil {
+//		log.Fatalf("unable to write src vault export: %v", err)
+//	}
+//} else {
+//	fmt.Println("Source dump exists, loading export")
+//	bytes, err := os.ReadFile("./source-data.json")
+//	if err != nil {
+//		log.Fatalf("%v", err)
+//	}
+//	json.Unmarshal(bytes, &secretsSrc)
+//}
+
+//if _, err := os.Stat("./target-data.json"); err == nil {
+//	fmt.Println("Target dump exists, loading export")
+//	bytesTarget, err := os.ReadFile("./target-data.json")
+//	if err != nil {
+//		log.Fatalf("%v", err)
+//	}
+//	json.Unmarshal(bytesTarget, &secretsTarget)
+//} else {
+//	targetConfig := vault.DefaultConfig()
+//	err = targetConfig.ConfigureTLS(
+//		&vault.TLSConfig{
+//			Insecure:      true,
+//			TLSServerName: conf.Target.Addr,
+//		},
+//	)
+//	if err != nil {
+//		log.Fatalf("%v", err)
+//	}
+//	targetConfig.Address = conf.Target.Addr
+
+//	targetClient, err := vault.NewClient(targetConfig)
+//	if err != nil {
+//		log.Fatalf("unable to initialize Vault client: %v", err)
+//	}
+//	targetClient.SetToken(conf.Target.Token)
+
+//	secretsTarget["source_vault"] = targetConfig.Address
+
+//	secretsTarget = recurse("runway_concourse", "cryogenics/", targetClient, secretsTarget)
+//	jsonString, err := json.Marshal(secretsTarget)
+//	os.WriteFile("./target-data.json", []byte(jsonString), 0644)
+
+//	if err != nil {
+//		log.Fatalf("unable to write target vault export: %v", err)
+//	}
+//}
+//if len(secretsToFind) == 0 {
+//	fmt.Println("You can start searching. Hit ESC to stop")
+//	findInMapValues(secretsSrc, secretsTarget)
+//} else {
+//	for _, secret := range secretsToFind {
+//		search(secret, secretsSrc, secretsTarget)
+
+//	}
+//}
